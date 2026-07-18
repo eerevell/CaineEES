@@ -1,51 +1,53 @@
 # Caine
 
-Caine is a modular autonomous Python runtime designed to run continuously on
-Debian 12 after an initial setup step. It is not an operating system and does
-not reimplement operating-system services. Instead, it relies on Debian-native
-components such as systemd, journalctl, SQLite, git, ssh, and networkd.
+Caine - модульная автономная среда выполнения на Python, рассчитанная на
+постоянную работу поверх Debian 12 после первоначальной настройки. Caine не
+является операционной системой и не переписывает функции ОС. Вместо этого он
+использует штатные возможности Debian: systemd, journalctl, SQLite, git, ssh и
+networkd.
 
-The project is intentionally structured as a production-ready foundation rather
-than a quick prototype. The code is typed, split into focused modules, tested,
-and prepared for growth into a larger autonomous system.
+Проект сразу строится как промышленный фундамент, а не как быстрый прототип.
+Код типизирован, разделен на независимые модули, покрыт тестами и подготовлен
+к росту до крупной автономной системы.
 
-## Goals
+## Цели
 
-- Run indefinitely as a systemd service.
-- Make operational decisions without user interaction after setup.
-- Keep EES1 as the only Caine organism.
-- Treat EES2 only as a remote compute coprocessor.
-- Persist memory and checkpoints outside the source tree.
-- Recover after crashes using the last saved checkpoint.
-- Update itself through Git only after dependencies install and tests pass.
-- Continue operating when the remote model server is unavailable.
-- Allow plugins to add capabilities without changing the core.
+- Работать бесконечно как systemd-сервис.
+- Принимать операционные решения без участия пользователя после настройки.
+- Сохранять EES1 единственным экземпляром организма Caine.
+- Использовать EES2 только как удаленный вычислительный сопроцессор.
+- Хранить память и контрольные точки вне дерева исходного кода.
+- Восстанавливаться после аварий по последней контрольной точке.
+- Обновляться через Git только после установки зависимостей и успешных тестов.
+- Продолжать работу при недоступности удаленного сервера моделей.
+- Подключать новые возможности через плагины без изменения ядра.
 
-## Architecture
+## Архитектура
 
-`Brain` is the coordinator. It does not contain business logic. The rest of the
-runtime is injected into it as independent components:
+`Brain` является управляющим координатором. Он не содержит прикладную
+бизнес-логику. Остальная среда выполнения передается в него как независимые
+зависимости:
 
-- `Planner` creates goals and manages task priority.
-- `Observer` reads CPU, RAM, disk, temperature, internet, and module health.
-- `Executor` dispatches tasks to registered async handlers.
-- `Critic` validates task results and limits repeated failure loops.
-- `Reasoning` routes simple decisions locally and complex ones remotely.
-- `MemoryStore` persists knowledge, history, goals, errors, and experience.
-- `Scheduler` runs periodic jobs such as checkpoints and update checks.
-- `Updater` performs Git-based self-updates through a staging directory.
-- `StartupManager` restores durable state.
-- `ShutdownManager` handles SIGTERM and SIGINT gracefully.
-- `PluginRegistry` loads external task handlers.
-- `EventBus` decouples modules through asynchronous events.
-- `HealthManager` checks and recovers unhealthy components.
-- `Watchdog` detects stale modules and restarts only affected components.
+- `Planner` создает цели и управляет приоритетами задач.
+- `Observer` наблюдает за CPU, RAM, диском, температурами, сетью и модулями.
+- `Executor` отправляет задачи зарегистрированным асинхронным обработчикам.
+- `Critic` проверяет результаты и ограничивает повторяющиеся циклы ошибок.
+- `Reasoning` направляет простые решения локальной модели, сложные - EES2.
+- `MemoryStore` хранит знания, историю, цели, ошибки и опыт.
+- `Scheduler` запускает периодические задачи: checkpoint и проверку обновлений.
+- `Updater` выполняет Git-обновления через staging-директорию.
+- `StartupManager` восстанавливает долговременное состояние.
+- `ShutdownManager` корректно обрабатывает SIGTERM и SIGINT.
+- `PluginRegistry` загружает внешние обработчики задач.
+- `EventBus` связывает модули через асинхронные события.
+- `HealthManager` проверяет состояние компонентов и запускает восстановление.
+- `Watchdog` обнаруживает зависшие модули и перезапускает только их.
 
-## EES1 and EES2 Roles
+## Роли EES1 и EES2
 
-Caine has one organism only: EES1.
+У Caine есть только один организм: EES1.
 
-EES1 owns:
+На EES1 находятся:
 
 - Brain;
 - Planner;
@@ -57,33 +59,35 @@ EES1 owns:
 - Reasoning;
 - Updater;
 - Shutdown;
-- all goals, history, checkpoints, and decisions.
+- все цели, история, контрольные точки и решения.
 
-EES2 is not another Caine instance. It has no Brain, no persistent memory, and
-no independent decision loop. It is a compute-only node used by EES1 for tasks
-such as LLM inference over HTTP.
+EES2 не является вторым экземпляром Caine. На нем нет Brain, постоянной памяти
+и собственного цикла принятия решений. EES2 - это только вычислительный узел,
+к которому EES1 обращается по HTTP, например для инференса LLM.
 
-The architecture is built so additional compute nodes can be added later
-without splitting Caine into multiple organisms.
+Архитектура специально построена так, чтобы в будущем можно было подключать
+дополнительные вычислительные узлы, не разделяя Caine на несколько независимых
+организмов.
 
-## Main Loop
+## Основной цикл
 
-Each cycle performs the same high-level sequence:
+Каждая итерация выполняет одну и ту же последовательность:
 
-1. Check system state.
-2. Check memory.
-3. Check the task queue.
-4. Determine the next goal.
-5. Execute the selected task.
-6. Critique the result.
-7. Record experience.
-8. Save periodic checkpoints.
+1. Проверить состояние системы.
+2. Проверить память.
+3. Проверить очередь задач.
+4. Определить следующую цель.
+5. Выполнить выбранную задачу.
+6. Проверить результат через Critic.
+7. Записать опыт.
+8. Сохранить периодические контрольные точки.
 
-The loop is asynchronous and intended to run forever under systemd supervision.
-Events are published through `EventBus` during cycle start, decisions, task
-completion, remote-node state changes, shutdown, and watchdog recovery.
+Цикл асинхронный и рассчитан на бесконечную работу под управлением systemd.
+Во время цикла события публикуются в `EventBus`: старт итерации, принятое
+решение, завершение задачи, изменение состояния удаленного узла, shutdown и
+восстановление через watchdog.
 
-## Project Layout
+## Структура проекта
 
 ```text
 Caine/
@@ -100,6 +104,7 @@ Caine/
     startup.py
   memory/
     store.py
+    repository.py
   network/
     compute_node.py
     remote_reasoning.py
@@ -119,47 +124,52 @@ requirements.txt
 README.md
 ```
 
-## Persistence
+## Постоянное хранение
 
-By default, durable state is stored in `/var/lib/caine`:
+По умолчанию долговременное состояние хранится в `/var/lib/caine`:
 
-- SQLite database: `/var/lib/caine/caine.sqlite3`
-- Checkpoint file: `/var/lib/caine/checkpoint.json`
+- база SQLite: `/var/lib/caine/caine.sqlite3`;
+- checkpoint: `/var/lib/caine/checkpoint.json`.
 
-The database schema includes tasks, goals, memories, experiences, and errors.
-The memory location is intentionally outside the source tree so updates do not
-destroy operational history.
+Схема базы содержит задачи, цели, память, опыт и ошибки. Память намеренно
+хранится вне исходников, чтобы обновления программы не уничтожали историю
+работы организма.
 
-## Configuration
+Для памяти введен Repository Pattern. Бизнес-логика зависит от контракта
+`MemoryRepository`, поэтому в будущем SQLite можно заменить другой СУБД без
+переписывания ядра.
 
-All runtime values live in YAML:
+## Конфигурация
+
+Все runtime-значения находятся в YAML:
 
 ```text
 Caine/config/caine.yaml
 ```
 
-For a real deployment, copy it to:
+Для реального развертывания файл следует скопировать сюда:
 
 ```text
 /etc/caine/caine.yaml
 ```
 
-Important settings include:
+Важные настройки:
 
-- memory paths;
-- loop and checkpoint intervals;
-- remote reasoning API URL;
-- remote compute node heartbeat URL;
-- Git repository and branch;
-- update directories;
-- test command;
-- logging path;
-- plugin directories.
+- пути памяти;
+- интервалы основного цикла и checkpoint;
+- URL удаленного reasoning API;
+- URL heartbeat удаленного вычислительного узла;
+- Git-репозиторий и ветка;
+- директории обновления;
+- команда тестов;
+- команда проверки запуска новой версии;
+- путь логов;
+- директории плагинов.
 
-## Debian 12 Installation
+## Установка на Debian 12
 
-Install Python 3.12, git, and systemd support packages on Debian 12. Then place
-the project in `/opt/caine-current` and point `/opt/caine` at it:
+На Debian 12 должны быть установлены Python 3.12, git и systemd. Затем проект
+размещается в `/opt/caine-current`, а `/opt/caine` указывает на активную версию:
 
 ```bash
 sudo useradd --system --home /var/lib/caine --shell /usr/sbin/nologin caine
@@ -168,7 +178,7 @@ sudo ln -sfn /opt/caine-current /opt/caine
 sudo bash Caine/scripts/install_debian12.sh
 ```
 
-After installation:
+После установки:
 
 ```bash
 sudo systemctl status caine
@@ -177,46 +187,47 @@ sudo journalctl -u caine -f
 
 ## systemd
 
-The service unit is located at:
+Unit-файл находится здесь:
 
 ```text
 Caine/systemd/caine.service
 ```
 
-It starts Caine after network-online, restarts it on failure, sends SIGTERM on
-shutdown, and writes stdout/stderr to the journal.
+Сервис запускает Caine после `network-online.target`, автоматически
+перезапускает процесс при сбоях, отправляет SIGTERM при остановке и пишет
+stdout/stderr в journald.
 
-## Self-Updates
+## Самообновление
 
-Caine checks for updates on the configured interval. The default model is:
+Caine проверяет обновления с заданным интервалом. Базовая модель директорий:
 
 ```text
-/opt/caine-current   active release tree
-/opt/caine-update    candidate update tree
-/opt/caine           symlink to active tree
+/opt/caine-current   активная версия
+/opt/caine-update    кандидат на обновление
+/opt/caine           symlink на активную версию
 ```
 
-The updater:
+Updater выполняет:
 
-1. Fetches or clones the configured branch.
-2. Installs dependencies if `requirements.txt` exists.
-3. Runs the configured test command.
-4. Runs a startup probe command.
-5. Switches the symlink only if validation passes.
-6. Stores current and previous version metadata.
-7. Rolls back to the previous target when anything fails.
+1. Fetch или clone настроенной ветки.
+2. Установку зависимостей, если есть `requirements.txt`.
+3. Запуск настроенной команды тестов.
+4. Запуск startup probe для проверки новой версии.
+5. Переключение symlink только после успешной проверки.
+6. Сохранение metadata о текущей и предыдущей версии.
+7. Rollback на предыдущую версию при любой ошибке.
 
-## Remote Reasoning
+## Удаленное reasoning
 
-Caine can use a second machine as a compute server for larger language models.
-Communication is HTTP-based. If the server is offline, Caine falls back to local
-decision logic and continues running.
+Caine может использовать второй компьютер как вычислительный сервер для
+больших языковых моделей. Обмен идет по HTTP. Если EES2 недоступен, Caine
+автоматически переключается на локальную модель и продолжает работу.
 
-EES1 checks EES2 with heartbeat requests. When EES2 becomes unavailable,
-Reasoning automatically stays local. When heartbeat recovers, remote inference
-is used again for sufficiently complex prompts.
+EES1 регулярно проверяет EES2 через heartbeat. Когда EES2 недоступен,
+`Reasoning` остается в локальном режиме. После восстановления heartbeat
+удаленный инференс снова используется для достаточно сложных запросов.
 
-Expected remote response shape:
+Ожидаемый формат ответа удаленного узла:
 
 ```json
 {
@@ -224,10 +235,10 @@ Expected remote response shape:
 }
 ```
 
-## Plugins
+## Плагины
 
-Plugins are Python files from configured plugin directories. A plugin exposes a
-`plugin` object:
+Плагины - это Python-файлы из настроенных директорий. Модуль плагина должен
+экспортировать объект `plugin`:
 
 ```python
 class ExamplePlugin:
@@ -259,13 +270,13 @@ class ExamplePlugin:
 plugin = ExamplePlugin()
 ```
 
-This lets new task handlers and event subscribers be added without modifying
-the core runtime. The registry tracks plugin permissions for future sandboxing
-and policy enforcement.
+Так новые обработчики задач и подписчики событий добавляются без изменения
+ядра. Registry хранит разрешения плагинов для будущего sandboxing и policy
+enforcement.
 
-## Health and Watchdog
+## HealthManager и Watchdog
 
-`HealthManager` tracks:
+`HealthManager` следит за:
 
 - Brain;
 - Memory;
@@ -275,61 +286,62 @@ and policy enforcement.
 - Scheduler;
 - Remote Node.
 
-When a component reports unhealthy state, the manager attempts the registered
-recovery action. `Watchdog` separately tracks component responsiveness and can
-restart only the stale component instead of stopping the whole organism.
+Если компонент сообщает о нездоровом состоянии, manager пытается выполнить
+зарегистрированное действие восстановления. `Watchdog` отдельно отслеживает
+отзывчивость компонентов и может перезапустить только зависший компонент, не
+останавливая весь организм.
 
-## Checkpoints
+## Контрольные точки
 
-Checkpoints include:
+Checkpoint включает:
 
-- current goal;
-- task queue;
-- planner state;
-- memory state;
-- save timestamp.
+- текущую цель;
+- очередь задач;
+- состояние планировщика;
+- состояние памяти;
+- время сохранения.
 
-Startup restores the latest checkpoint and merges it with pending durable tasks
-from SQLite.
+При старте Caine восстанавливает последнюю контрольную точку и объединяет ее с
+pending-задачами из SQLite.
 
-## Development
+## Разработка
 
-Install dependencies:
+Установка зависимостей:
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-Run tests:
+Запуск тестов:
 
 ```bash
 python -m pytest Caine/tests
 ```
 
-Current verification status:
+Текущий статус проверки:
 
 ```text
-16 passed
+19 passed
 ```
 
-## Status
+## Статус проекта
 
-This repository contains the production-oriented foundation for Caine:
+Репозиторий содержит промышленный фундамент Caine:
 
-- autonomous runtime loop;
-- SQLite memory;
-- checkpoint and recovery;
-- systemd integration;
-- self-update mechanism;
-- graceful shutdown;
-- plugin loading;
+- автономный runtime loop;
+- SQLite-память;
+- checkpoint и recovery;
+- интеграцию с systemd;
+- механизм самообновления;
+- безопасное завершение работы;
+- загрузку плагинов;
 - EventBus;
 - HealthManager;
 - Watchdog;
-- local/remote reasoning router;
-- EES1/EES2 role separation;
-- focused test suite.
+- маршрутизацию local/remote reasoning;
+- строгое разделение ролей EES1 и EES2;
+- набор focused tests.
 
-The next engineering step is to add real task handlers for concrete operational
-goals: Debian maintenance, network diagnostics, SSH workflows, model-server
-health checks, and richer local reasoning backends.
+Следующий инженерный шаг - добавить реальные обработчики задач для конкретных
+операционных целей: обслуживание Debian, сетевую диагностику, SSH-сценарии,
+проверку model-server и более развитые локальные reasoning backend.
