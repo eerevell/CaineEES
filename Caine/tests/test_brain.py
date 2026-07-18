@@ -6,7 +6,9 @@ import pytest
 
 from Caine.core.brain import Brain
 from Caine.core.critic import Critic
+from Caine.core.event_bus import EventBus
 from Caine.core.executor import Executor, system_check_handler
+from Caine.core.health import HealthManager
 from Caine.core.models import SystemState
 from Caine.core.observer import Observer
 from Caine.core.planner import Planner
@@ -14,7 +16,9 @@ from Caine.core.reasoning import Reasoning
 from Caine.core.scheduler import Scheduler
 from Caine.core.shutdown import ShutdownManager
 from Caine.core.updater import AsyncCommandRunner, Updater
+from Caine.core.watchdog import Watchdog
 from Caine.memory.store import MemoryStore
+from Caine.network.compute_node import ComputeNodeClient
 from Caine.tests.conftest import make_settings, make_test_logger
 
 
@@ -34,6 +38,13 @@ async def test_brain_runs_one_cycle(tmp_path) -> None:
     store = MemoryStore(settings.memory.database_path)
     await store.open()
     logger = make_test_logger()
+    event_bus = EventBus(logger)
+    compute_node = ComputeNodeClient(
+        settings.network,
+        settings.reasoning,
+        logger,
+        event_bus,
+    )
     brain = Brain(
         settings=settings,
         memory=store,
@@ -45,6 +56,10 @@ async def test_brain_runs_one_cycle(tmp_path) -> None:
         scheduler=Scheduler(),
         updater=Updater(settings.update, logger, AsyncCommandRunner()),
         shutdown=ShutdownManager(logger),
+        event_bus=event_bus,
+        health=HealthManager(logger),
+        watchdog=Watchdog(5.0, logger),
+        compute_node=compute_node,
         logger=logger,
     )
     await brain.initialize(None, [])

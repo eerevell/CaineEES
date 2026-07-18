@@ -38,6 +38,7 @@ class RuntimeSettings:
     checkpoint_interval_seconds: float
     max_consecutive_failures: int
     shutdown_timeout_seconds: float
+    watchdog_timeout_seconds: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +48,7 @@ class ObserverSettings:
     internet_probe_host: str
     internet_probe_port: int
     internet_timeout_seconds: float
+    systemd_services: list[str]
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +59,17 @@ class ReasoningSettings:
     remote_api_url: str
     remote_timeout_seconds: float
     complexity_threshold: int
+
+
+@dataclass(frozen=True, slots=True)
+class NetworkSettings:
+    """EES1 to EES2 compute-node networking settings."""
+
+    remote_node_name: str
+    heartbeat_url: str
+    heartbeat_interval_seconds: float
+    reconnect_backoff_seconds: float
+    max_reconnect_backoff_seconds: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +84,8 @@ class UpdateSettings:
     check_interval_seconds: float
     requirements_file: str
     test_command: list[str]
+    startup_probe_command: list[str]
+    metadata_file: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +112,7 @@ class Settings:
     runtime: RuntimeSettings
     observer: ObserverSettings
     reasoning: ReasoningSettings
+    network: NetworkSettings
     update: UpdateSettings
     logging: LoggingSettings
     plugins: PluginSettings
@@ -117,6 +133,7 @@ def load_settings(path: Path) -> Settings:
     runtime = _require_mapping(config.get("runtime"), "runtime")
     observer = _require_mapping(config.get("observer"), "observer")
     reasoning = _require_mapping(config.get("reasoning"), "reasoning")
+    network = _require_mapping(config.get("network"), "network")
     update = _require_mapping(config.get("update"), "update")
     logging = _require_mapping(config.get("logging"), "logging")
     plugins = _require_mapping(config.get("plugins"), "plugins")
@@ -136,6 +153,9 @@ def load_settings(path: Path) -> Settings:
             shutdown_timeout_seconds=float(
                 runtime["shutdown_timeout_seconds"],
             ),
+            watchdog_timeout_seconds=float(
+                runtime["watchdog_timeout_seconds"],
+            ),
         ),
         observer=ObserverSettings(
             internet_probe_host=str(observer["internet_probe_host"]),
@@ -143,12 +163,29 @@ def load_settings(path: Path) -> Settings:
             internet_timeout_seconds=float(
                 observer["internet_timeout_seconds"],
             ),
+            systemd_services=[
+                str(service)
+                for service in observer.get("systemd_services", [])
+            ],
         ),
         reasoning=ReasoningSettings(
             local_model_name=str(reasoning["local_model_name"]),
             remote_api_url=str(reasoning["remote_api_url"]),
             remote_timeout_seconds=float(reasoning["remote_timeout_seconds"]),
             complexity_threshold=int(reasoning["complexity_threshold"]),
+        ),
+        network=NetworkSettings(
+            remote_node_name=str(network["remote_node_name"]),
+            heartbeat_url=str(network["heartbeat_url"]),
+            heartbeat_interval_seconds=float(
+                network["heartbeat_interval_seconds"],
+            ),
+            reconnect_backoff_seconds=float(
+                network["reconnect_backoff_seconds"],
+            ),
+            max_reconnect_backoff_seconds=float(
+                network["max_reconnect_backoff_seconds"],
+            ),
         ),
         update=UpdateSettings(
             repository_url=str(update["repository_url"]),
@@ -159,6 +196,10 @@ def load_settings(path: Path) -> Settings:
             check_interval_seconds=float(update["check_interval_seconds"]),
             requirements_file=str(update["requirements_file"]),
             test_command=[str(part) for part in update["test_command"]],
+            startup_probe_command=[
+                str(part) for part in update["startup_probe_command"]
+            ],
+            metadata_file=str(update["metadata_file"]),
         ),
         logging=LoggingSettings(
             level=str(logging["level"]),

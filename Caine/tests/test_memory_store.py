@@ -25,7 +25,7 @@ async def test_memory_persists_tasks_and_checkpoint(tmp_path) -> None:
     )
 
     tasks = await store.list_tasks(TaskStatus.PENDING)
-    restored_goal, restored_tasks = await store.load_checkpoint(
+    restored_goal, restored_tasks, metadata = await store.load_checkpoint(
         tmp_path / "data" / "checkpoint.json",
     )
     memory = await store.recall("knowledge", "answer")
@@ -35,4 +35,5 @@ async def test_memory_persists_tasks_and_checkpoint(tmp_path) -> None:
     assert restored_goal is not None
     assert restored_goal.description == "test goal"
     assert restored_tasks[0].id == task.id
+    assert "saved_at" in metadata
     assert memory == {"value": 42}

@@ -171,6 +171,8 @@ class MemoryStore:
         path: Path,
         current_goal: Goal | None,
         queue: list[Task],
+        planner_state: dict[str, Any] | None = None,
+        memory_state: dict[str, Any] | None = None,
     ) -> None:
         """Persist a crash-recovery checkpoint outside the source tree."""
 
@@ -178,6 +180,8 @@ class MemoryStore:
         payload = {
             "current_goal": self._goal_to_json(current_goal),
             "task_queue": [self._task_to_json(task) for task in queue],
+            "planner_state": planner_state or {},
+            "memory_state": memory_state or {},
             "saved_at": datetime.now(UTC).isoformat(),
         }
         await asyncio.to_thread(path.write_text, json.dumps(payload), "utf-8")
@@ -186,16 +190,21 @@ class MemoryStore:
     async def load_checkpoint(
         self,
         path: Path,
-    ) -> tuple[Goal | None, list[Task]]:
+    ) -> tuple[Goal | None, list[Task], dict[str, Any]]:
         """Load the latest checkpoint if present."""
 
         if not path.exists():
-            return None, []
+            return None, [], {}
         raw = await asyncio.to_thread(path.read_text, "utf-8")
         payload = json.loads(raw)
         goal = self._dict_to_goal(payload["current_goal"])
         tasks = [self._dict_to_task(item) for item in payload["task_queue"]]
-        return goal, tasks
+        metadata = {
+            "planner_state": payload.get("planner_state", {}),
+            "memory_state": payload.get("memory_state", {}),
+            "saved_at": payload.get("saved_at"),
+        }
+        return goal, tasks, metadata
 
     async def _execute(self, query: str, parameters: tuple[Any, ...]) -> None:
         connection = self._require_connection()
@@ -253,6 +262,10 @@ class MemoryStore:
         data["status"] = task.status.value
         data["created_at"] = task.created_at.isoformat()
         data["updated_at"] = task.updated_at.isoformat()
+        if task.not_before is not None:
+            data["not_before"] = task.not_before.isoformat()
+        if task.deadline is not None:
+            data["deadline"] = task.deadline.isoformat()
         return data
 
     @classmethod
@@ -265,9 +278,20 @@ class MemoryStore:
             status=TaskStatus(data["status"]),
             attempts=int(data["attempts"]),
             max_attempts=int(data["max_attempts"]),
+            dependencies=list(data.get("dependencies", [])),
+            not_before=cls._optional_datetime(data.get("not_before")),
+            deadline=cls._optional_datetime(data.get("deadline")),
+            repeat_interval_seconds=data.get("repeat_interval_seconds"),
+            cancelled_reason=data.get("cancelled_reason"),
             created_at=datetime.fromisoformat(data["created_at"]),
             updated_at=datetime.fromisoformat(data["updated_at"]),
         )
+
+    @staticmethod
+    def _optional_datetime(value: str | None) -> datetime | None:
+        if value is None:
+            return None
+        return datetime.fromisoformat(value)
 
     @staticmethod
     def _goal_to_json(goal: Goal | None) -> dict[str, Any] | None:

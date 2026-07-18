@@ -20,6 +20,23 @@ from Caine.core.models import ExecutionResult
 
 class SamplePlugin:
     name = "sample"
+    permissions = {"executor.register"}
+    events = []
+
+    async def on_load(self):
+        self.events.append("load")
+
+    async def on_start(self):
+        self.events.append("start")
+
+    async def on_tick(self):
+        self.events.append("tick")
+
+    async def on_stop(self):
+        self.events.append("stop")
+
+    async def on_unload(self):
+        self.events.append("unload")
 
     async def register(self, executor):
         async def handler(task):
@@ -34,9 +51,20 @@ plugin = SamplePlugin()
     registry = PluginRegistry([tmp_path], logging.getLogger("test"))
 
     await registry.load(executor)
+    await registry.start()
+    await registry.tick()
+    await registry.stop()
 
     assert "plugin_task" in executor.handlers
     assert registry.plugins[0].name == "sample"
+    assert registry.has_permission("sample", "executor.register") is True
+    assert registry.plugins[0].events == [
+        "load",
+        "start",
+        "tick",
+        "stop",
+        "unload",
+    ]
 
 
 @pytest.mark.asyncio

@@ -22,14 +22,14 @@ class StartupManager:
         """Open memory and restore checkpoint state."""
 
         await self.memory.open()
-        goal, queue = await self.memory.load_checkpoint(
+        goal, queue, metadata = await self.memory.load_checkpoint(
             self.settings.memory.checkpoint_path,
         )
         if goal or queue:
             self.logger.info(
-                "Recovered checkpoint with goal=%s tasks=%s",
+                "Recovered checkpoint with goal=%s tasks=%s saved_at=%s",
                 goal.id if goal else None,
                 len(queue),
+                metadata.get("saved_at"),
             )
         return goal, queue
-

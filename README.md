@@ -13,6 +13,8 @@ and prepared for growth into a larger autonomous system.
 
 - Run indefinitely as a systemd service.
 - Make operational decisions without user interaction after setup.
+- Keep EES1 as the only Caine organism.
+- Treat EES2 only as a remote compute coprocessor.
 - Persist memory and checkpoints outside the source tree.
 - Recover after crashes using the last saved checkpoint.
 - Update itself through Git only after dependencies install and tests pass.
@@ -35,6 +37,34 @@ runtime is injected into it as independent components:
 - `StartupManager` restores durable state.
 - `ShutdownManager` handles SIGTERM and SIGINT gracefully.
 - `PluginRegistry` loads external task handlers.
+- `EventBus` decouples modules through asynchronous events.
+- `HealthManager` checks and recovers unhealthy components.
+- `Watchdog` detects stale modules and restarts only affected components.
+
+## EES1 and EES2 Roles
+
+Caine has one organism only: EES1.
+
+EES1 owns:
+
+- Brain;
+- Planner;
+- Memory;
+- Observer;
+- Executor;
+- Critic;
+- Scheduler;
+- Reasoning;
+- Updater;
+- Shutdown;
+- all goals, history, checkpoints, and decisions.
+
+EES2 is not another Caine instance. It has no Brain, no persistent memory, and
+no independent decision loop. It is a compute-only node used by EES1 for tasks
+such as LLM inference over HTTP.
+
+The architecture is built so additional compute nodes can be added later
+without splitting Caine into multiple organisms.
 
 ## Main Loop
 
@@ -50,6 +80,8 @@ Each cycle performs the same high-level sequence:
 8. Save periodic checkpoints.
 
 The loop is asynchronous and intended to run forever under systemd supervision.
+Events are published through `EventBus` during cycle start, decisions, task
+completion, remote-node state changes, shutdown, and watchdog recovery.
 
 ## Project Layout
 
@@ -69,6 +101,7 @@ Caine/
   memory/
     store.py
   network/
+    compute_node.py
     remote_reasoning.py
   plugins/
     registry.py
@@ -116,6 +149,7 @@ Important settings include:
 - memory paths;
 - loop and checkpoint intervals;
 - remote reasoning API URL;
+- remote compute node heartbeat URL;
 - Git repository and branch;
 - update directories;
 - test command;
@@ -167,14 +201,20 @@ The updater:
 1. Fetches or clones the configured branch.
 2. Installs dependencies if `requirements.txt` exists.
 3. Runs the configured test command.
-4. Switches the symlink only if tests pass.
-5. Keeps the current version running when anything fails.
+4. Runs a startup probe command.
+5. Switches the symlink only if validation passes.
+6. Stores current and previous version metadata.
+7. Rolls back to the previous target when anything fails.
 
 ## Remote Reasoning
 
 Caine can use a second machine as a compute server for larger language models.
 Communication is HTTP-based. If the server is offline, Caine falls back to local
 decision logic and continues running.
+
+EES1 checks EES2 with heartbeat requests. When EES2 becomes unavailable,
+Reasoning automatically stays local. When heartbeat recovers, remote inference
+is used again for sufficiently complex prompts.
 
 Expected remote response shape:
 
@@ -192,6 +232,25 @@ Plugins are Python files from configured plugin directories. A plugin exposes a
 ```python
 class ExamplePlugin:
     name = "example"
+    permissions = {"executor.register"}
+
+    async def on_load(self):
+        ...
+
+    async def on_start(self):
+        ...
+
+    async def on_tick(self):
+        ...
+
+    async def on_stop(self):
+        ...
+
+    async def on_unload(self):
+        ...
+
+    def event_subscriptions(self):
+        return {"task.finished": "on_task_finished"}
 
     async def register(self, executor):
         executor.handlers["example_task"] = handler
@@ -200,7 +259,38 @@ class ExamplePlugin:
 plugin = ExamplePlugin()
 ```
 
-This lets new task handlers be added without modifying the core runtime.
+This lets new task handlers and event subscribers be added without modifying
+the core runtime. The registry tracks plugin permissions for future sandboxing
+and policy enforcement.
+
+## Health and Watchdog
+
+`HealthManager` tracks:
+
+- Brain;
+- Memory;
+- SQLite;
+- Network;
+- Updater;
+- Scheduler;
+- Remote Node.
+
+When a component reports unhealthy state, the manager attempts the registered
+recovery action. `Watchdog` separately tracks component responsiveness and can
+restart only the stale component instead of stopping the whole organism.
+
+## Checkpoints
+
+Checkpoints include:
+
+- current goal;
+- task queue;
+- planner state;
+- memory state;
+- save timestamp.
+
+Startup restores the latest checkpoint and merges it with pending durable tasks
+from SQLite.
 
 ## Development
 
@@ -233,7 +323,11 @@ This repository contains the production-oriented foundation for Caine:
 - self-update mechanism;
 - graceful shutdown;
 - plugin loading;
+- EventBus;
+- HealthManager;
+- Watchdog;
 - local/remote reasoning router;
+- EES1/EES2 role separation;
 - focused test suite.
 
 The next engineering step is to add real task handlers for concrete operational

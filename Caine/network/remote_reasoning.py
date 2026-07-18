@@ -18,7 +18,11 @@ class RemoteReasoningClient:
     logger: logging.Logger
 
     async def reason(self, prompt: str, context: dict[str, Any]) -> str | None:
-        """Return a remote model answer, or None when unavailable."""
+        """Return a remote model answer, or None when unavailable.
+
+        This legacy client remains for compatibility. New runtime wiring uses
+        ComputeNodeClient so EES2 is treated strictly as a compute node.
+        """
 
         timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)
         try:
@@ -42,4 +46,3 @@ class RemoteReasoningClient:
         except TimeoutError:
             self.logger.warning("Remote reasoning timed out")
             return None
-
