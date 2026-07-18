@@ -1,0 +1,27 @@
+[Unit]
+Description=Caine Autonomous Runtime
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=caine
+Group=caine
+WorkingDirectory=/opt/caine
+ExecStart=/usr/bin/python3.12 /opt/caine/caine.py --config /etc/caine/caine.yaml
+Restart=always
+RestartSec=10
+TimeoutStopSec=45
+KillSignal=SIGTERM
+StandardOutput=journal
+StandardError=journal
+Environment=PYTHONUNBUFFERED=1
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/caine /var/log/caine /opt
+
+[Install]
+WantedBy=multi-user.target
+

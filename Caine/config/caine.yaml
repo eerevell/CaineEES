@@ -1,0 +1,43 @@
+memory:
+  data_dir: /var/lib/caine
+  sqlite_file: caine.sqlite3
+  checkpoint_file: checkpoint.json
+
+runtime:
+  loop_interval_seconds: 5
+  checkpoint_interval_seconds: 180
+  max_consecutive_failures: 5
+  shutdown_timeout_seconds: 30
+
+observer:
+  internet_probe_host: 1.1.1.1
+  internet_probe_port: 53
+  internet_timeout_seconds: 3
+
+reasoning:
+  local_model_name: small-local-model
+  remote_api_url: http://caine-compute.local:8080/reason
+  remote_timeout_seconds: 15
+  complexity_threshold: 50
+
+update:
+  repository_url: git@example.com:your-org/caine.git
+  branch: main
+  current_dir: /opt/caine-current
+  update_dir: /opt/caine-update
+  symlink_path: /opt/caine
+  check_interval_seconds: 3600
+  requirements_file: requirements.txt
+  test_command:
+    - python
+    - -m
+    - pytest
+
+logging:
+  level: INFO
+  file_path: /var/log/caine/caine.log
+
+plugins:
+  enabled: true
+  directories:
+    - /opt/caine/plugins
